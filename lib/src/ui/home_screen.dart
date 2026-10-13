@@ -29,6 +29,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _uiQueue = Future.value();
   bool _touchInProgress = false;
 
+  /// Device id whose touch card is showing, and a signal that closes it.
+  String? _touchCardFor;
+  final ValueNotifier<int> _closeTouchCard = ValueNotifier(0);
+
   KdropController get c => widget.controller;
 
   @override
@@ -40,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _events?.cancel();
+    _closeTouchCard.dispose();
     super.dispose();
   }
 
@@ -52,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
       case TouchEvent():
         _onTouch(event);
       case IncomingOfferEvent():
+        // The phone we just touched sent something itself: its offer replaces
+        // the "share your contact?" card.
+        if (event.offer.senderId == _touchCardFor) _closeTouchCard.value++;
         _enqueue(() async {
           if (!event.isAnswered) await showIncomingOfferSheet(context, event);
         });
@@ -78,7 +86,18 @@ class _HomeScreenState extends State<HomeScreen> {
         unawaited(c.sendTo(peer, viaTouch: true));
         return;
       }
-      final choice = await showTouchCard(context, deviceId: event.deviceId, peer: peer);
+      _touchCardFor = event.deviceId;
+      final TouchChoice? choice;
+      try {
+        choice = await showTouchCard(
+          context,
+          deviceId: event.deviceId,
+          peer: peer,
+          dismiss: _closeTouchCard,
+        );
+      } finally {
+        _touchCardFor = null;
+      }
       if (choice == TouchChoice.shareContact && peer != null) {
         unawaited(c.sendTo(peer, share: StagedShare.contact(c.myContactCard), viaTouch: true));
       }

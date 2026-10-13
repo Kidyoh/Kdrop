@@ -109,6 +109,29 @@ void main() {
     expect(await run('Decline'), isFalse);
   });
 
+  testWidgets('touch card returns the choice or closes when dismissed', (tester) async {
+    late BuildContext ctx;
+    await tester.pumpWidget(_app(Builder(builder: (context) {
+      ctx = context;
+      return const SizedBox.expand();
+    })));
+
+    final share = showTouchCard(ctx, deviceId: _peerA.id, peer: _peerA);
+    await tester.pumpAndSettle();
+    expect(find.text('Sam Pixel'), findsOneWidget);
+    await tester.tap(find.text('Share'));
+    await tester.pumpAndSettle();
+    expect(await share, TouchChoice.shareContact);
+
+    final dismiss = ValueNotifier(0);
+    final closed = showTouchCard(ctx, deviceId: _peerA.id, peer: _peerA, dismiss: dismiss);
+    await tester.pumpAndSettle();
+    dismiss.value++;
+    await tester.pumpAndSettle();
+    expect(await closed, isNull);
+    expect(find.text('Sam Pixel'), findsNothing);
+  });
+
   test('formatBytes', () {
     expect(formatBytes(512), '512 B');
     expect(formatBytes(1536), '1.5 KB');

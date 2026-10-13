@@ -175,10 +175,13 @@ class _OfferPreview extends StatelessWidget {
 enum TouchChoice { shareContact, receiveOnly }
 
 /// The card that drops in from the top after two phones touch, NameDrop style.
+/// It closes itself (returning null) when [dismiss] fires, e.g. because the
+/// other phone already sent something.
 Future<TouchChoice?> showTouchCard(
   BuildContext context, {
   required String deviceId,
   required Peer? peer,
+  Listenable? dismiss,
 }) {
   return showGeneralDialog<TouchChoice>(
     context: context,
@@ -186,7 +189,8 @@ Future<TouchChoice?> showTouchCard(
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 420),
-    pageBuilder: (context, _, _) => _TouchCard(deviceId: deviceId, peer: peer),
+    pageBuilder: (context, _, _) =>
+        _TouchCard(deviceId: deviceId, peer: peer, dismiss: dismiss),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
       return SlideTransition(
@@ -197,15 +201,44 @@ Future<TouchChoice?> showTouchCard(
   );
 }
 
-class _TouchCard extends StatelessWidget {
-  const _TouchCard({required this.deviceId, required this.peer});
+class _TouchCard extends StatefulWidget {
+  const _TouchCard({required this.deviceId, required this.peer, this.dismiss});
 
   final String deviceId;
   final Peer? peer;
+  final Listenable? dismiss;
+
+  @override
+  State<_TouchCard> createState() => _TouchCardState();
+}
+
+class _TouchCardState extends State<_TouchCard> {
+  bool _closed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.dismiss?.addListener(_close);
+  }
+
+  @override
+  void dispose() {
+    widget.dismiss?.removeListener(_close);
+    super.dispose();
+  }
+
+  void _close() => _pop(null);
+
+  void _pop(TouchChoice? choice) {
+    if (_closed || !mounted) return;
+    _closed = true;
+    Navigator.of(context).pop(choice);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final p = peer;
+    final p = widget.peer;
+    final deviceId = widget.deviceId;
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
@@ -254,8 +287,7 @@ class _TouchCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () =>
-                              Navigator.of(context).pop(TouchChoice.receiveOnly),
+                          onPressed: () => _pop(TouchChoice.receiveOnly),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(48),
                           ),
@@ -267,7 +299,7 @@ class _TouchCard extends StatelessWidget {
                         child: FilledButton(
                           onPressed: p == null
                               ? null
-                              : () => Navigator.of(context).pop(TouchChoice.shareContact),
+                              : () => _pop(TouchChoice.shareContact),
                           style: FilledButton.styleFrom(
                             minimumSize: const Size.fromHeight(48),
                           ),
